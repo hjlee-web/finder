@@ -42,7 +42,7 @@ button[hidden],.tips[hidden]{display:none}
 </main>
 <script>
 (function () {
-  var PREFIX = '192.168.0.', PATH = '/finder-beacon.png', TIMEOUT = 4000, KEY = 'lastPc';
+  var PREFIX = '192.168.0.', PATH = '/finder-beacon.png', TIMEOUT = 2500, KEY = 'lastPc';
   var statusEl = document.getElementById('status'), detail = document.getElementById('detail');
   var bar = document.getElementById('progress'), tips = document.getElementById('tips'), retry = document.getElementById('retry');
   var run = 0;
@@ -71,15 +71,23 @@ button[hidden],.tips[hidden]{display:none}
     tips.hidden = true; retry.hidden = true; bar.style.width = '0';
     statusEl.textContent = '같은 Wi-Fi 안에서 PC를 찾고 있어요.'; detail.textContent = '';
     if (first) order.push(first);
-    for (var i = 1; i <= 254; i++) if (i !== first) order.push(i);
-    order.forEach(function (n) {
-      probe(n, id).then(function (hit) {
-        if (id !== run || found) return;
-        checked++; bar.style.width = Math.round(checked / order.length * 100) + '%';
-        if (hit) { found = true; go(hit); return; }
-        if (checked === order.length) { statusEl.textContent = 'PC를 찾지 못했어요.'; tips.hidden = false; retry.hidden = false; }
-      });
-    });
+    for (var i = 2; i <= 254; i++) if (i !== first) order.push(i);
+    // Safari limits how many connections it opens at once, so check a few addresses at a time.
+    var next = 0, active = 0, LIMIT = 12;
+    function pump() {
+      while (!found && id === run && active < LIMIT && next < order.length) {
+        var n = order[next++]; active++;
+        probe(n, id).then(function (hit) {
+          active--;
+          if (id !== run || found) return;
+          checked++; bar.style.width = Math.round(checked / order.length * 100) + '%';
+          if (hit) { found = true; go(hit); return; }
+          if (checked === order.length) { statusEl.textContent = 'PC를 찾지 못했어요.'; tips.hidden = false; retry.hidden = false; return; }
+          pump();
+        });
+      }
+    }
+    pump();
   }
   retry.addEventListener('click', scan);
   scan();
