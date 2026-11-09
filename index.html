@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="연결">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<title>연결 중</title>
+<style>
+:root{--bg:#F7F1E8;--ink:#3B2E24;--muted:#7A6654;--accent:#735640;--line:#D9CBB7}
+@media (prefers-color-scheme:dark){:root{--bg:#211B16;--ink:#F2E9DD;--muted:#BFAE9A;--accent:#E2C6A3;--line:#4A3D32}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);font:17px/1.55 -apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;padding:24px 16px}
+main{width:100%;max-width:440px;text-align:center}
+h1{font-size:24px;margin:0 0 6px}
+p{margin:6px 0;color:var(--muted)}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin:22px 0 10px}
+.bar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+button{margin-top:18px;font:inherit;font-weight:600;padding:12px 22px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);cursor:pointer}
+button[hidden],.tips[hidden]{display:none}
+.tips{text-align:left;margin-top:18px;padding:14px 16px;border:1px solid var(--line);border-radius:10px}
+.tips li{margin:4px 0}
+</style>
+</head>
+<body>
+<main>
+<h1>연결 중</h1>
+<p id="status">같은 Wi-Fi 안에서 PC를 찾고 있어요.</p>
+<div class="bar" aria-hidden="true"><i id="progress"></i></div>
+<p id="detail"></p>
+<div class="tips" id="tips" hidden>
+<b>PC를 찾지 못했어요. 확인해 주세요</b>
+<ul>
+<li>PC가 켜져 있고 앱이 실행 중인지</li>
+<li>아이패드가 같은 Wi-Fi에 연결돼 있는지</li>
+<li>인증서를 설치하고 신뢰를 켰는지</li>
+</ul>
+</div>
+<button id="retry" type="button" hidden>다시 찾기</button>
+</main>
+<script>
+(function () {
+  var PREFIX = '192.168.0.', PATH = '/finder-beacon.png', TIMEOUT = 4000, KEY = 'lastPc';
+  var statusEl = document.getElementById('status'), detail = document.getElementById('detail');
+  var bar = document.getElementById('progress'), tips = document.getElementById('tips'), retry = document.getElementById('retry');
+  var run = 0;
+  function last() { try { var v = localStorage.getItem(KEY); return /^\d{1,3}$/.test(v || '') ? Number(v) : null; } catch (e) { return null; } }
+  function remember(n) { try { localStorage.setItem(KEY, String(n)); } catch (e) {} }
+  function probe(n, id) {
+    return new Promise(function (resolve) {
+      var img = new Image(), done = false;
+      function finish(ok) { if (done) return; done = true; img.onload = img.onerror = null; resolve(ok && id === run ? n : null); }
+      var timer = setTimeout(function () { finish(false); }, TIMEOUT);
+      img.onload = function () { clearTimeout(timer); finish(img.naturalWidth === 1); };
+      img.onerror = function () { clearTimeout(timer); finish(false); };
+      img.referrerPolicy = 'no-referrer';
+      img.src = 'https://' + PREFIX + n + PATH + '?t=' + Date.now();
+    });
+  }
+  function go(n) {
+    remember(n);
+    statusEl.textContent = 'PC를 찾았어요. 여는 중이에요.';
+    detail.textContent = PREFIX + n;
+    bar.style.width = '100%';
+    location.replace('https://' + PREFIX + n + '/');
+  }
+  function scan() {
+    var id = ++run, checked = 0, found = false, order = [], first = last();
+    tips.hidden = true; retry.hidden = true; bar.style.width = '0';
+    statusEl.textContent = '같은 Wi-Fi 안에서 PC를 찾고 있어요.'; detail.textContent = '';
+    if (first) order.push(first);
+    for (var i = 1; i <= 254; i++) if (i !== first) order.push(i);
+    order.forEach(function (n) {
+      probe(n, id).then(function (hit) {
+        if (id !== run || found) return;
+        checked++; bar.style.width = Math.round(checked / order.length * 100) + '%';
+        if (hit) { found = true; go(hit); return; }
+        if (checked === order.length) { statusEl.textContent = 'PC를 찾지 못했어요.'; tips.hidden = false; retry.hidden = false; }
+      });
+    });
+  }
+  retry.addEventListener('click', scan);
+  scan();
+})();
+</script>
+</body>
+</html>
